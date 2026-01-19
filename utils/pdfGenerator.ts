@@ -213,7 +213,7 @@ export const exportToPdf = async (
     doc.setFontSize(9); 
     doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
     doc.text(`${dateTimeStr}`, 14, 290);
-    doc.text("@ 2026 Lotofacil Premium by André Miranda", 105, 290, { align: "center" });
+    doc.text("© 2026 Lotofacil Premium by André Miranda", 105, 290, { align: "center" });
     doc.text(`Página ${i} de ${pageCount}`, 196, 290, { align: "right" });
   }
 

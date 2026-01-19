@@ -18,11 +18,25 @@ import NumberInputGrid from './components/NumberInputGrid';
 import JogoCard from './components/JogoCard';
 import WelcomeScreen from './components/WelcomeScreen';
 
+const BASE_STORAGE_KEY = 'lotofacil_premium_base_numbers';
+const RESULT_STORAGE_KEY = 'lotofacil_premium_result_numbers';
+
 const App: React.FC = () => {
   // States
   const [showIntro, setShowIntro] = useState<boolean>(true);
-  const [baseNumbers, setBaseNumbers] = useState<string[]>(Array(19).fill(''));
-  const [resultNumbers, setResultNumbers] = useState<string[]>(Array(15).fill(''));
+  
+  // Inicializa a base a partir do localStorage
+  const [baseNumbers, setBaseNumbers] = useState<string[]>(() => {
+    const saved = localStorage.getItem(BASE_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : Array(19).fill('');
+  });
+  
+  // Inicializa o resultado a partir do localStorage
+  const [resultNumbers, setResultNumbers] = useState<string[]>(() => {
+    const saved = localStorage.getItem(RESULT_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : Array(15).fill('');
+  });
+
   const [games, setGames] = useState<number[][]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>('loading');
@@ -36,6 +50,15 @@ const App: React.FC = () => {
     v15: 'R$ 3.733.907,79',
   });
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
+
+  // Persistência automática
+  useEffect(() => {
+    localStorage.setItem(BASE_STORAGE_KEY, JSON.stringify(baseNumbers));
+  }, [baseNumbers]);
+
+  useEffect(() => {
+    localStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(resultNumbers));
+  }, [resultNumbers]);
 
   // Load Initial API Data
   useEffect(() => {
@@ -346,7 +369,7 @@ const App: React.FC = () => {
 
             {/* Footer */}
             <footer className="mt-auto bg-purple-50 p-6 text-center border-t border-purple-100 text-[10px] md:text-xs text-[#930089]/70 space-y-2">
-              <p>@ 2026 Lotofacil Premium by André Miranda</p>
+              <p>© 2026 Lotofacil Premium by André Miranda</p>
               <p className="italic text-purple-400">Este projeto não é afiliado à Caixa Econômica Federal. Use por sua conta e risco.</p>
             </footer>
           </div>

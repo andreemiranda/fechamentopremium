@@ -17,30 +17,30 @@ const NumberInputGrid: React.FC<NumberInputGridProps> = ({ count, values, onChan
   }, [count]);
 
   const handleInputChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    // Permite apenas dígitos e limita a 2 caracteres
+    // Filtra apenas números e limita a 2 caracteres
     const rawVal = e.target.value.replace(/\D/g, '').slice(0, 2);
     
-    // Atualiza o estado imediatamente para que o usuário veja o que está digitando (ex: '1', '2')
+    // Atualiza o estado imediatamente para não travar a digitação do usuário
     onChange(index, rawVal);
 
-    // Se o usuário digitou os 2 dígitos, realizamos a validação e o auto-avanço
+    // Quando o usuário completa 2 dígitos, processamos a validação e o auto-foco
     if (rawVal.length === 2) {
       let num = parseInt(rawVal, 10);
       
-      // Limites: de 01 a 25
+      // Regras: 01 a 25
       if (num > 25) num = 25;
       if (num < 1) num = 1;
 
       const formatted = num.toString().padStart(2, '0');
 
-      // Verifica se o número já existe em OUTRO campo
+      // Verifica duplicidade nos campos do MESMO prefixo (exceto ele mesmo)
       const isDuplicate = values.some((v, i) => i !== index && v === formatted);
       
       if (isDuplicate) {
-        // Se for duplicado, limpamos o campo para indicar erro
+        // Se for duplicado, limpa para forçar correção e não avança
         onChange(index, '');
       } else {
-        // Salva o valor formatado e avança o foco para o próximo input
+        // Valor válido e único: formata e avança foco
         onChange(index, formatted);
         if (index < count - 1) {
           inputRefs.current[index + 1]?.focus();
@@ -50,11 +50,11 @@ const NumberInputGrid: React.FC<NumberInputGridProps> = ({ count, values, onChan
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Ao apertar Backspace em um campo vazio, volta para o campo anterior
+    // Apagar e voltar campo
     if (e.key === 'Backspace' && !values[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
-    // Navegação entre campos com as setas do teclado
+    // Navegação com setas
     if (e.key === 'ArrowRight' && index < count - 1) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -65,10 +65,11 @@ const NumberInputGrid: React.FC<NumberInputGridProps> = ({ count, values, onChan
 
   const handleBlur = (index: number) => {
     const val = values[index];
-    // Ao perder o foco, se o campo tiver apenas 1 dígito (ex: '5'), preenchemos como '05'
+    // Ao perder o foco, se o campo tiver apenas 1 dígito (ex: "5"), preenche como "05"
     if (val && val.length === 1) {
       const num = parseInt(val, 10);
       const padded = num.toString().padStart(2, '0');
+      
       const isDuplicate = values.some((v, i) => i !== index && v === padded);
       onChange(index, isDuplicate ? '' : padded);
     }
