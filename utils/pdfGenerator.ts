@@ -9,16 +9,27 @@ export const exportToPdf = async (
   hits: Record<number, number>,
   concursoNumber?: number | null
 ) => {
-  const { jsPDF } = (window as any).jspdf;
-  if (!jsPDF) return;
+  const jspdfModule = (window as any).jspdf;
+  if (!jspdfModule || !jspdfModule.jsPDF) {
+    console.error("Biblioteca jsPDF não encontrada.");
+    return;
+  }
+  const { jsPDF } = jspdfModule;
 
-  // A4: 210 x 297 mm
   const doc = new jsPDF();
   const R_PURPLE = 147, G_PURPLE = 0, B_PURPLE = 137;
   const TXT_GREY = 60;
 
   const now = new Date();
   const dateTimeStr = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
+
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const filename = `Fechamento-lotofacil-premium-${dd}${mm}${yyyy}-${hh}${min}${ss}.pdf`;
 
   // Header
   doc.setFillColor(R_PURPLE, G_PURPLE, B_PURPLE);
@@ -33,7 +44,7 @@ export const exportToPdf = async (
   doc.setFont("helvetica", "normal");
   doc.text("Garantia de premiações múltiplas com 19 dezenas selecionadas estrategicamente", 105, 23, { align: "center" });
 
-  let y = 34; // Começando um pouco mais acima
+  let y = 34;
   const drawTitle = (text: string, customGap = 12) => {
     doc.setFontSize(12);
     doc.setTextColor(R_PURPLE, G_PURPLE, B_PURPLE);
@@ -94,7 +105,6 @@ export const exportToPdf = async (
   // 3. Resumo Financeiro
   drawTitle("3. RESUMO FINANCEIRO");
   doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
   doc.text(`* Custo Total (50 Jogos): ${financialData.custo}`, 14, y); y += 6;
   doc.text(`* Prêmio Bruto: ${financialData.premio}`, 14, y); y += 6;
   doc.setFont("helvetica", "bold");
@@ -124,7 +134,6 @@ export const exportToPdf = async (
   }
   if (resumoItems.length > 0) {
     doc.setFontSize(9);
-    doc.setTextColor(0, 0, 0);
     doc.text(resumoItems.join(" | "), 14, y);
     y += 10;
   } else {
@@ -133,119 +142,80 @@ export const exportToPdf = async (
   }
 
   // 5. JOGOS GERADOS
-  // Reduzindo o espaço entre o título 5 e o início dos jogos
   drawTitle("5. JOGOS GERADOS", 6);
-  
   const rows = games.map((game, i) => {
     const hitsCount = game.filter(n => conf.includes(n)).length;
     const gameString = game.map(n => n.toString().padStart(2, '0')).join(' - ');
-    return [
-      (i + 1).toString().padStart(2, '0'), 
-      gameString, 
-      hitsCount >= 11 ? `${hitsCount} ACERTOS` : '-'
-    ];
+    return [(i + 1).toString().padStart(2, '0'), gameString, hitsCount >= 11 ? `${hitsCount} ACERTOS` : '-'];
   });
 
-  doc.autoTable({
+  (doc as any).autoTable({
     startY: y,
     head: [['#', 'DEZENAS DO JOGO', 'STATUS']],
     body: rows,
     theme: 'striped',
-    styles: { fontSize: 10, cellPadding: 1.2 }, // Reduzindo padding para caber mais jogos
+    styles: { fontSize: 10, cellPadding: 1.2 }, 
     headStyles: { fillColor: [R_PURPLE, G_PURPLE, B_PURPLE], halign: 'center' },
-    columnStyles: { 
-      0: { halign: 'center', cellWidth: 10 }, 
-      1: { halign: 'center', fontStyle: 'bold' }, 
-      2: { halign: 'center', cellWidth: 40 } 
-    },
-    margin: { bottom: 12 }, // Margem reduzida para caber até o jogo 42 na primeira página
+    columnStyles: { 0: { halign: 'center', cellWidth: 10 }, 1: { halign: 'center', fontStyle: 'bold' }, 2: { halign: 'center', cellWidth: 40 } },
+    margin: { bottom: 12 }, 
     rowPageBreak: 'avoid',
+    didParseCell: (data: any) => {
+      // Estilização da coluna STATUS (índice 2)
+      if (data.section === 'body' && data.column.index === 2) {
+        const textValue = data.cell.text ? data.cell.text[0] : '';
+        // Verifica se o texto corresponde a 14 ou 15 acertos para aplicar negrito e cor roxa
+        if (textValue === '14 ACERTOS' || textValue === '15 ACERTOS') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [R_PURPLE, G_PURPLE, B_PURPLE];
+        }
+      }
+    },
     didDrawCell: (data: any) => {
-      // Destaque nos números sorteados
       if (data.section === 'body' && data.column.index === 1 && conf.length > 0) {
         const game = games[data.row.index];
         const cellX = data.cell.x;
         const cellY = data.cell.y;
         const cellW = data.cell.width;
         const cellH = data.cell.height;
-        
         doc.setFillColor(data.row.index % 2 === 0 ? 255 : 248, 248, 255);
         doc.rect(cellX + 0.2, cellY + 0.2, cellW - 0.4, cellH - 0.4, 'F');
-        
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-
         const dezenasStr = game.map(d => d.toString().padStart(2, '0'));
         let currentX = cellX + (cellW / 2) - (doc.getTextWidth(dezenasStr.join(' - ')) / 2);
-        
         dezenasStr.forEach((numStr, idx) => {
           const isHit = conf.includes(parseInt(numStr));
-          if (isHit) {
-            doc.setTextColor(R_PURPLE, G_PURPLE, B_PURPLE); 
-          } else {
-            doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
-          }
-          
+          doc.setTextColor(isHit ? R_PURPLE : TXT_GREY, isHit ? G_PURPLE : TXT_GREY, isHit ? B_PURPLE : TXT_GREY);
           doc.text(numStr, currentX, cellY + (cellH / 2) + 1.2);
           currentX += doc.getTextWidth(numStr);
-          
           if (idx < dezenasStr.length - 1) {
             doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
-            const separator = " - ";
-            doc.text(separator, currentX, cellY + (cellH / 2) + 1.2);
-            currentX += doc.getTextWidth(separator);
+            doc.text(" - ", currentX, cellY + (cellH / 2) + 1.2);
+            currentX += doc.getTextWidth(" - ");
           }
         });
-      }
-      
-      // Destaque na coluna STATUS para 14 e 15 Acertos: Negrito e Roxo
-      if (data.section === 'body' && data.column.index === 2 && conf.length > 0) {
-        const text = data.cell.text[0];
-        if (text && (text.includes('14') || text.includes('15'))) {
-          doc.setTextColor(R_PURPLE, G_PURPLE, B_PURPLE);
-          doc.setFont("helvetica", "bold");
-          // Re-renderizando o texto em negrito (o autoTable renderiza o texto original primeiro)
-          const cellX = data.cell.x;
-          const cellY = data.cell.y;
-          const cellW = data.cell.width;
-          const cellH = data.cell.height;
-          
-          // Limpa fundo para o texto negrito
-          doc.setFillColor(data.row.index % 2 === 0 ? 255 : 248, 248, 255);
-          doc.rect(cellX + 0.5, cellY + 0.5, cellW - 1, cellH - 1, 'F');
-          
-          doc.text(text, cellX + (cellW / 2), cellY + (cellH / 2) + 1.2, { align: 'center' });
-        }
       }
     }
   });
 
   // 6. INFORMAÇÕES ADICIONAIS
-  y = doc.lastAutoTable.finalY + 10;
-  
-  if (y > 240) {
-    doc.addPage();
-    y = 30;
-  }
-
+  y = (doc as any).lastAutoTable.finalY + 10;
+  if (y > 240) { doc.addPage(); y = 30; }
   drawTitle("6. INFORMAÇÕES ADICIONAIS");
   doc.setFontSize(9);
-  doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
-  
   const infoText = "A principal vantagem de utilizar um fechamento com 19 números está na redução significativa do risco matemático. Enquanto uma aposta simples de 15 números tem probabilidade de acerto de 1 em 3.268.760, ao selecionar 19 dezenas você cobre um universo que equivale a 3.876 combinações possíveis. Com isso, a chance de os 15 números sorteados estarem dentro do seu grupo de 19 é de 1 em 843 — uma melhora expressiva. Este fechamento de 50 jogos distribui estrategicamente suas dezenas para maximizar as possibilidades de premiação e otimizar o retorno do investimento. Em vez de depender exclusivamente da sorte, você transforma sua aposta em uma abordagem mais inteligente e eficiente, ideal para quem joga com regularidade.";
-
   doc.text(infoText, 14, y, { maxWidth: 182, align: 'justify' });
 
-  // Footers
-  const pageCount = doc.internal.getNumberOfPages();
+  // Rodapé - Tamanho 9 e sem "Gerado em:"
+  const pageCount = (doc as any).internal.getNumberOfPages();
   for(let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(150);
-    doc.text(`Gerado em: ${dateTimeStr}`, 14, 290);
+    doc.setFontSize(9); 
+    doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
+    doc.text(`${dateTimeStr}`, 14, 290);
     doc.text("@ 2026 Lotofacil Premium by André Miranda", 105, 290, { align: "center" });
     doc.text(`Página ${i} de ${pageCount}`, 196, 290, { align: "right" });
   }
 
-  doc.save('Relatorio_Lotofacil_Premium_50_Jogos.pdf');
+  doc.save(filename);
 };
