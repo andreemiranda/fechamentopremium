@@ -19,6 +19,7 @@ export const exportToPdf = async (
   const doc = new jsPDF();
   const R_PURPLE = 147, G_PURPLE = 0, B_PURPLE = 137;
   const TXT_GREY = 60;
+  const SITE_URL = "https://lotofacilpremium.netlify.app/";
 
   const now = new Date();
   const dateTimeStr = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
@@ -31,7 +32,7 @@ export const exportToPdf = async (
   const ss = String(now.getSeconds()).padStart(2, '0');
   const filename = `Fechamento-lotofacil-premium-${dd}${mm}${yyyy}-${hh}${min}${ss}.pdf`;
 
-  // Header
+  // Header Rect
   doc.setFillColor(R_PURPLE, G_PURPLE, B_PURPLE);
   doc.rect(0, 0, 210, 26, 'F');
   doc.setTextColor(255, 255, 255);
@@ -85,7 +86,9 @@ export const exportToPdf = async (
   drawTitle(resultTitle);
 
   if (conf.length === 0) {
-    doc.text("Nenhum resultado inserido para conferência.", 14, y);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
+    doc.text("Nenhum resultado selecionado para conferência automática.", 14, y);
     y += 10;
   } else {
     let xConf = 14;
@@ -106,45 +109,62 @@ export const exportToPdf = async (
   drawTitle("3. RESUMO FINANCEIRO");
   doc.setFontSize(10);
   doc.text(`* Custo Total (50 Jogos): ${financialData.custo}`, 14, y); y += 6;
-  doc.text(`* Prêmio Bruto: ${financialData.premio}`, 14, y); y += 6;
-  doc.setFont("helvetica", "bold");
-  doc.text(`* Lucro Líquido: ${financialData.lucro}`, 14, y);
-  doc.setFont("helvetica", "normal");
-  y += 6;
-
-  if (financialData.lucroValue > 0) {
-    const extenso = numberToWords(financialData.lucroValue);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(120);
-    const splitExtenso = doc.splitTextToSize(`(${extenso})`, 180);
-    doc.text(splitExtenso, 14, y);
-    y += (splitExtenso.length * 5) + 4; 
-  } else {
+  
+  if (conf.length > 0) {
+    doc.text(`* Prêmio Bruto: ${financialData.premio}`, 14, y); y += 6;
+    doc.setFont("helvetica", "bold");
+    doc.text(`* Lucro Líquido: ${financialData.lucro}`, 14, y);
+    doc.setFont("helvetica", "normal");
     y += 6;
+
+    if (financialData.lucroValue > 0) {
+      const extenso = numberToWords(financialData.lucroValue);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(120);
+      const splitExtenso = doc.splitTextToSize(`(${extenso})`, 180);
+      doc.text(splitExtenso, 14, y);
+      y += (splitExtenso.length * 5) + 4; 
+    } else {
+      y += 6;
+    }
+  } else {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
+    doc.text("(Premiações e lucro não calculados - Fechamento não conferido)", 14, y);
+    y += 10;
   }
 
   // 4. RESUMO DE ACERTOS
   drawTitle("4. RESUMO DE ACERTOS");
-  const resumoItems = [];
-  for (let i = 11; i <= 15; i++) {
-    if (hits[i] && hits[i] > 0) {
-      resumoItems.push(`${i} Acertos (x ${hits[i]})`);
-    }
-  }
-  if (resumoItems.length > 0) {
-    doc.setFontSize(9);
-    doc.text(resumoItems.join(" | "), 14, y);
+  
+  if (conf.length === 0) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
+    doc.text("Atenção: Este fechamento ainda não foi conferido com um resultado oficial.", 14, y);
     y += 10;
   } else {
-    doc.text("Nenhuma premiação identificada.", 14, y);
-    y += 10;
+    const resumoItems = [];
+    for (let i = 11; i <= 15; i++) {
+      if (hits[i] && hits[i] > 0) {
+        resumoItems.push(`${i} Acertos (x ${hits[i]})`);
+      }
+    }
+    if (resumoItems.length > 0) {
+      doc.setFontSize(9);
+      doc.text(resumoItems.join(" | "), 14, y);
+      y += 10;
+    } else {
+      doc.text("Nenhuma premiação identificada.", 14, y);
+      y += 10;
+    }
   }
 
   // 5. JOGOS GERADOS
   drawTitle("5. JOGOS GERADOS", 6);
   const rows = games.map((game, i) => {
-    const hitsCount = game.filter(n => conf.includes(n)).length;
+    const hitsCount = conf.length > 0 ? game.filter(n => conf.includes(n)).length : 0;
     const gameString = game.map(n => n.toString().padStart(2, '0')).join(' - ');
     return [(i + 1).toString().padStart(2, '0'), gameString, hitsCount >= 11 ? `${hitsCount} ACERTOS` : '-'];
   });
@@ -160,10 +180,8 @@ export const exportToPdf = async (
     margin: { bottom: 12 }, 
     rowPageBreak: 'avoid',
     didParseCell: (data: any) => {
-      // Estilização da coluna STATUS (índice 2)
       if (data.section === 'body' && data.column.index === 2) {
         const textValue = data.cell.text ? data.cell.text[0] : '';
-        // Verifica se o texto corresponde a 14 ou 15 acertos para aplicar negrito e cor roxa
         if (textValue === '14 ACERTOS' || textValue === '15 ACERTOS') {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.textColor = [R_PURPLE, G_PURPLE, B_PURPLE];
@@ -171,7 +189,7 @@ export const exportToPdf = async (
       }
     },
     didDrawCell: (data: any) => {
-      if (data.section === 'body' && data.column.index === 1 && conf.length > 0) {
+      if (data.section === 'body' && data.column.index === 1) {
         const game = games[data.row.index];
         const cellX = data.cell.x;
         const cellY = data.cell.y;
@@ -184,7 +202,7 @@ export const exportToPdf = async (
         const dezenasStr = game.map(d => d.toString().padStart(2, '0'));
         let currentX = cellX + (cellW / 2) - (doc.getTextWidth(dezenasStr.join(' - ')) / 2);
         dezenasStr.forEach((numStr, idx) => {
-          const isHit = conf.includes(parseInt(numStr));
+          const isHit = conf.length > 0 && conf.includes(parseInt(numStr));
           doc.setTextColor(isHit ? R_PURPLE : TXT_GREY, isHit ? G_PURPLE : TXT_GREY, isHit ? B_PURPLE : TXT_GREY);
           doc.text(numStr, currentX, cellY + (cellH / 2) + 1.2);
           currentX += doc.getTextWidth(numStr);
@@ -206,15 +224,32 @@ export const exportToPdf = async (
   const infoText = "A principal vantagem de utilizar um fechamento com 19 números está na redução significativa do risco matemático. Enquanto uma aposta simples de 15 números tem probabilidade de acerto de 1 em 3.268.760, ao selecionar 19 dezenas você cobre um universo que equivale a 3.876 combinações possíveis. Com isso, a chance de os 15 números sorteados estarem dentro do seu grupo de 19 é de 1 em 843 — uma melhora expressiva. Este fechamento de 50 jogos distribui estrategicamente suas dezenas para maximizar as possibilidades de premiação e otimizar o retorno do investimento. Em vez de depender exclusivamente da sorte, você transforma sua aposta em uma abordagem mais inteligente e eficiente, ideal para quem joga com regularidade.";
   doc.text(infoText, 14, y, { maxWidth: 182, align: 'justify' });
 
-  // Rodapé - Tamanho 9 e sem "Gerado em:"
+  // Paginacao e Headers/Footers
   const pageCount = (doc as any).internal.getNumberOfPages();
   for(let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(9); 
+    
+    // Header URL (canto superior direito)
+    doc.setFontSize(9);
+    if (i === 1) {
+      doc.setTextColor(255, 255, 255);
+    } else {
+      doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
+    }
+    doc.text(SITE_URL, 196, 10, { align: "right" });
+
+    // Rodapé
     doc.setTextColor(TXT_GREY, TXT_GREY, TXT_GREY);
-    doc.text(`${dateTimeStr}`, 14, 290);
+    doc.setFontSize(9);
+    
+    // Paginação no canto inferior esquerdo
+    doc.text(`Página ${i} de ${pageCount}`, 14, 290);
+    
+    // Copyright no centro
     doc.text("© 2026 Lotofacil Premium by André Miranda", 105, 290, { align: "center" });
-    doc.text(`Página ${i} de ${pageCount}`, 196, 290, { align: "right" });
+    
+    // Data/Hora no canto inferior direito
+    doc.text(`${dateTimeStr}`, 196, 290, { align: "right" });
   }
 
   doc.save(filename);

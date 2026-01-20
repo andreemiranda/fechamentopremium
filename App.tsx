@@ -76,7 +76,10 @@ const App: React.FC = () => {
     if (result) {
       setLatestConcurso(result);
       setApiStatus('online');
-      setResultNumbers(result.dezenas.map(d => d.toString().padStart(2, '0')));
+      // Apenas preenche se estiver vazio para não sobrescrever o que o usuário está digitando
+      if (resultNumbers.every(n => n === '')) {
+        setResultNumbers(result.dezenas.map(d => d.toString().padStart(2, '0')));
+      }
       setFinancial(prev => ({
         ...prev,
         v11: result.premios[11] ? formatCurrency(result.premios[11]) : prev.v11,
@@ -181,6 +184,7 @@ const App: React.FC = () => {
 
   const stats = useMemo(() => {
     const s: Stats = { 11: 0, 12: 0, 13: 0, 14: 0, 15: 0 };
+    if (!showResults) return s;
     const resInt = resultNumbers.filter(n => n !== '').map(n => parseInt(n));
     if (resInt.length !== 15) return s;
 
@@ -191,11 +195,11 @@ const App: React.FC = () => {
       }
     });
     return s;
-  }, [games, resultNumbers]);
+  }, [games, resultNumbers, showResults]);
 
   const financialSummary = useMemo(() => {
     const vAposta = parseCurrencyString(financial.valorAposta);
-    const custo = vAposta * 50;
+    const custo = vAposta * games.length;
     let premio = 0;
     premio += stats[11] * parseCurrencyString(financial.v11);
     premio += stats[12] * parseCurrencyString(financial.v12);
@@ -209,13 +213,15 @@ const App: React.FC = () => {
       lucro: formatCurrency(lucro),
       lucroValue: lucro
     };
-  }, [financial, stats]);
+  }, [financial, stats, games.length]);
 
   const handlePdfExport = () => {
     const baseInt = baseNumbers.map(n => parseInt(n)).filter(n => !isNaN(n));
-    const resInt = resultNumbers.map(n => parseInt(n)).filter(n => !isNaN(n));
+    const resInt = showResults 
+      ? resultNumbers.map(n => parseInt(n)).filter(n => !isNaN(n))
+      : [];
     
-    const isOfficialResult = latestConcurso && 
+    const isOfficialResult = showResults && latestConcurso && 
       latestConcurso.dezenas.every(d => resultNumbers.includes(d.toString().padStart(2, '0')));
     
     exportToPdf(
@@ -289,61 +295,66 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Financial Panel - Only visible after Clicking "Conferir" */}
-            {showResults && games.length > 0 && (
-              <section className="m-5 md:m-8 p-6 bg-purple-50 border border-purple-200 rounded-2xl shadow-sm animate-in fade-in duration-500">
-                <div className="text-left mb-4">
-                  <h3 className="text-[#930089] font-bold text-lg inline-block">3. Calculadora de Prêmios 🏆</h3>
-                  <p className="text-[10px] text-purple-600 mt-1 font-semibold">
-                    Última Atualização: Conc. 3590 (17/01/2026) | Fonte: Caixa Econômica Federal
-                  </p>
+            {/* Financial Panel */}
+            <section className="m-5 md:m-8 p-6 bg-purple-50 border border-purple-200 rounded-2xl shadow-sm animate-in fade-in duration-500">
+              <div className="text-left mb-4">
+                <h3 className="text-[#930089] font-bold text-lg inline-block">3. Calculadora de Prêmios 🏆</h3>
+                <p className="text-[10px] text-purple-600 mt-1 font-semibold">
+                  Última Atualização: Conc. {latestConcurso?.numero || '...'} | Fonte: Caixa Econômica Federal
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-xl border border-purple-100 flex flex-col items-center shadow-sm">
+                  <label className="text-[10px] text-[#930089] uppercase font-bold mb-1">Valor da Aposta (Unitário)</label>
+                  <input 
+                    type="text" 
+                    className="w-full text-center font-bold text-[#930089] border border-purple-200 p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-300 transition-all"
+                    value={financial.valorAposta}
+                    onChange={(e) => setFinancial({ ...financial, valorAposta: formatCurrencyInput(e.target.value) })}
+                  />
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div className="bg-white p-4 rounded-xl border border-purple-100 flex flex-col items-center shadow-sm">
-                    <label className="text-[10px] text-[#930089] uppercase font-bold mb-1">Valor da Aposta (Unitário)</label>
-                    <input 
-                      type="text" 
-                      className="w-full text-center font-bold text-[#930089] border border-purple-200 p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-300 transition-all"
-                      value={financial.valorAposta}
-                      onChange={(e) => setFinancial({ ...financial, valorAposta: formatCurrencyInput(e.target.value) })}
-                    />
-                  </div>
-                  <div className="bg-[#930089] p-4 rounded-xl text-white flex items-center justify-center font-bold shadow-md">
-                    Custo Total (50 Jogos): {financialSummary.custo}
-                  </div>
+                <div className="bg-[#930089] p-4 rounded-xl text-white flex items-center justify-center font-bold shadow-md">
+                  Custo Total ({games.length} Jogos): {financialSummary.custo}
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-                  {[11, 12, 13, 14, 15].map(hit => (
-                    <div key={hit} className="bg-white p-3 rounded-xl border border-purple-100 text-center flex flex-col items-center shadow-sm">
-                      <label className="text-[9px] text-[#930089] uppercase mb-1 font-bold">
-                        {hit} Acertos (x <strong>{stats[hit as keyof Stats]}</strong>)
-                      </label>
-                      <input 
-                        type="text" 
-                        className="w-full text-center font-bold text-[#E20084] border border-purple-100 p-1.5 rounded-lg text-xs bg-white outline-none transition-all"
-                        value={financial[`v${hit}` as keyof FinancialState]}
-                        onChange={(e) => setFinancial({ ...financial, [`v${hit}` as keyof FinancialState]: formatCurrencyInput(e.target.value) })}
-                      />
+              {/* Detalhes de Premiação - Só aparecem após Conferir */}
+              {showResults && (
+                <div className="animate-in slide-in-from-top-4 duration-500">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                    {[11, 12, 13, 14, 15].map(hit => (
+                      <div key={hit} className="bg-white p-3 rounded-xl border border-purple-100 text-center flex flex-col items-center shadow-sm">
+                        <label className="text-[9px] text-[#930089] uppercase mb-1 font-bold">
+                          {hit} Acertos (x <strong>{stats[hit as keyof Stats]}</strong>)
+                        </label>
+                        <input 
+                          type="text" 
+                          className="w-full text-center font-bold text-[#E20084] border border-purple-100 p-1.5 rounded-lg text-xs bg-white outline-none transition-all"
+                          value={financial[`v${hit}` as keyof FinancialState]}
+                          onChange={(e) => setFinancial({ ...financial, [`v${hit}` as keyof FinancialState]: formatCurrencyInput(e.target.value) })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-white rounded-xl p-5 text-center border-2 border-dashed border-[#930089] shadow-inner mb-6">
+                    <div className="text-[#930089] font-bold text-lg">Prêmio Bruto: {financialSummary.premio}</div>
+                    <div className={`mt-2 py-3 px-4 rounded-xl font-black text-xl md:text-2xl ${financialSummary.lucroValue >= 0 ? 'bg-[#930089]/10 text-[#930089]' : 'bg-[#E20084]/10 text-[#E20084]'}`}>
+                      Lucro Líquido: {financialSummary.lucro}
                     </div>
-                  ))}
-                </div>
-
-                <div className="bg-white rounded-xl p-5 text-center border-2 border-dashed border-[#930089] shadow-inner">
-                  <div className="text-[#930089] font-bold text-lg">Prêmio Bruto: {financialSummary.premio}</div>
-                  <div className={`mt-2 py-3 px-4 rounded-xl font-black text-xl md:text-2xl ${financialSummary.lucroValue >= 0 ? 'bg-[#930089]/10 text-[#930089]' : 'bg-[#E20084]/10 text-[#E20084]'}`}>
-                    Lucro Líquido: {financialSummary.lucro}
                   </div>
                 </div>
+              )}
 
-                <div className="mt-6 flex flex-wrap gap-3 justify-center">
+              {games.length > 0 && (
+                <div className="flex flex-wrap gap-3 justify-center">
                   <button onClick={handlePdfExport} className="bg-[#930089] text-white px-6 py-3 rounded-full font-bold hover:bg-[#4a0045] transition-all flex items-center gap-2 shadow-lg">
                     🖨️ Download PDF
                   </button>
                 </div>
-              </section>
-            )}
+              )}
+            </section>
 
             {/* Games Grid Section */}
             {games.length > 0 && (
